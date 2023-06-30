@@ -84,7 +84,7 @@ def compute_SH_diffs(spot_centers, img_aberrated):
 
 def B_matrix(spot_centers, num_zernike_modes):
     """
-        If s is the vectorized vector of spot centers and z is a vector of
+        If s is the vectorized vector of spot deviations and z is a vector of
         Zernike coefficients, this function returns B such that s = B*z.
     """
     num_spots = spot_centers.shape[0]
