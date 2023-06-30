@@ -4,10 +4,27 @@ import matplotlib.pyplot as plt
 
 from fast_zernike import j_to_mn, zernike_derivative_cartesian
 
+def normalize_coordinates(coord_array):
+    """
+        Given an nx2 numpy array of of (x,y) coordinates in pixels, apply 
+        a coordinate transformation so that the mean of the coordinates is 
+        at (0,0) and all pixels are within the unit circle. This function
+        returns the center of the coordinates and the amount by which the
+        coordinates were scaled, so that the original coordinates may be 
+        retrieved from the returns as
+        coord_array = coords_transformed*coord_scale + coord_mean
+    """
+    coord_mean = np.mean(coord_array,axis=0)
+    coords_centered = coord_array - coord_mean
+    coord_scale = np.max(np.linalg.norm(coords_centered,axis=1))
+    coords_transformed = coords_centered / coord_scale 
+    return coords_transformed, coord_mean, coord_scale
+
 def find_spot_centers(img):
     """
-    Returns a numpy array of indices denoting the center of each Shack-Hartmann 
-    spot.
+        Returns a numpy array of indices (coordinates in the pixel-based 
+        coordinate system of an image obtained from the Shack-Hartmann 
+        sensor) denoting the center of each Shack-Hartmann spot.
     """
     intensity_threshold = 50
     ret, img_bw = cv.threshold(img, intensity_threshold, 255, 0)
@@ -22,6 +39,12 @@ def find_spot_centers(img):
     return spot_centers
 
 def min_distance_between_spots(spot_centers):
+    """
+        For a given Shack-Hartmann pattern, this function returns the
+        separation between spots in the Shack-Hartmann pattern. This is
+        to be used in deciding the appropriate size of detection bounding
+        boxes for spot deviations in a Shack-Hartmann pattern.
+    """
     return min(np.linalg.norm(np.diff(spot_centers,axis=0),axis=1).astype(int))
 
 def compute_SH_diffs(spot_centers, img_aberrated):
@@ -60,6 +83,10 @@ def compute_SH_diffs(spot_centers, img_aberrated):
     return diffs.astype(int)
 
 def B_matrix(spot_centers, num_zernike_modes):
+    """
+        If s is the vectorized vector of spot centers and z is a vector of
+        Zernike coefficients, this function returns B such that s = B*z.
+    """
     num_spots = spot_centers.shape[0]
     B = np.empty((2*num_spots, num_zernike_modes))
     print(B)
@@ -76,8 +103,14 @@ def B_matrix(spot_centers, num_zernike_modes):
     return B
 
 def estimate_wavefront_zernike(spot_centers, img_aberrated, num_zernike_modes):
-    diffs = compute_SH_diffs(spot_centers, img_aberrated)
+    """ 
+        Returns vector of zernike coefficients. First coefficient (position zero) 
+        is the piston mode. The ordering used is 
+    """
     num_spots = spot_centers.shape[0]
-    spot_centers_vector = spot_centers.reshape((2*num_spots,1))
-    B = B_matrix(spot_centers, num_zernike_modes)
-    return np.matmul(np.linalg.pinv(B), spot_centers_vector)
+    spots_normalized, spots_mean, spots_scale = normalize_coordinates(spot_centers)
+    diffs = compute_SH_diffs(spot_centers, img_aberrated)
+    diffs_normalized = diffs * spots_scale
+    diffs_normalized_vectorized = diffs_normalized.reshape((2*num_spots,1))
+    B = B_matrix(spots_normalized, num_zernike_modes)
+    return np.matmul(np.linalg.pinv(B), diffs_normalized_vectorized)
