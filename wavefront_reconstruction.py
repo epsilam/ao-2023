@@ -89,7 +89,6 @@ def B_matrix(spot_centers, num_zernike_modes):
     """
     num_spots = spot_centers.shape[0]
     B = np.empty((2*num_spots, num_zernike_modes))
-    print(B)
     for (row_index,zern_index),_ in np.ndenumerate(B):
         spot_index = row_index // 2
         m,n = j_to_mn(zern_index) 
@@ -102,15 +101,30 @@ def B_matrix(spot_centers, num_zernike_modes):
         B[row_index,zern_index] = zernike_derivative_cartesian(m, n, x, y, derivative_variable)
     return B
 
-def estimate_wavefront_zernike(spot_centers, img_aberrated, num_zernike_modes):
+def estimate_wavefront_zernike_normalized(spot_centers, img_aberrated, num_zernike_modes):
     """ 
         Returns vector of zernike coefficients. First coefficient (position zero) 
-        is the piston mode. The ordering used is 
+        is the piston mode. Normalizes the coordinates to the unit circle.
     """
     num_spots = spot_centers.shape[0]
     spots_normalized, spots_mean, spots_scale = normalize_coordinates(spot_centers)
     diffs = compute_SH_diffs(spot_centers, img_aberrated)
-    diffs_normalized = diffs * spots_scale
+    diffs_normalized = diffs / spots_scale
     diffs_normalized_vectorized = diffs_normalized.reshape((2*num_spots,1))
     B = B_matrix(spots_normalized, num_zernike_modes)
-    return np.matmul(np.linalg.pinv(B), diffs_normalized_vectorized)
+    res = np.linalg.lstsq(B, diffs_normalized_vectorized)
+    z = res[0]
+    return z
+
+def estimate_wavefront_zernike(spot_centers, img_aberrated, num_zernike_modes):
+    """ 
+        Returns vector of zernike coefficients. First coefficient (position zero) 
+        is the piston mode. Normalizes the coordinates to the unit circle.
+    """
+    num_spots = spot_centers.shape[0]
+    diffs = compute_SH_diffs(spot_centers, img_aberrated)
+    diffs_vectorized = diffs.reshape(2*num_spots,1)
+    B = B_matrix(spot_centers, num_zernike_modes)
+    res = np.linalg.lstsq(B, diffs_vectorized, rcond=None)
+    z = res[0]
+    return z
